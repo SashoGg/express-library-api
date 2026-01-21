@@ -1,8 +1,12 @@
+require('dotenv').config(); // 1. Load environment variables first
 const express = require('express');
-const app = express();
-const port = 3000;
+const { createHash } = require('node:crypto');
 
-app.use(express.json());
+const app = express(); //
+
+const port = process.env.PORT || 3000;
+
+app.use(express.json()); // 3. Now you can use 'app'
 
 // --- DATA ---
 let books = [
@@ -11,44 +15,66 @@ let books = [
     { id: 3, title: "To Kill a Mockingbird", author: "Harper Lee" }
 ];
 
-// --- SECURITY SYSTEM (Exercise 2 & 3) ---
+// --- SECURITY SYSTEM ---
 
-// 1. A simple variable to track login state (Simulated Database)
-let isAdminLoggedIn = false;
+// 1. Helper function to hash passwords
+// We use SHA-256 to turn "password123" into a long random string
+const hashPassword = (password) => {
+    return createHash('sha256').update(password).digest('hex');
+};
 
-// 2. Authentication Middleware
-// This function acts as a "Guard" at the door.
-const requireLogin = (req, res, next) => {
-    if (isAdminLoggedIn) {
-        next(); // User is logged in, let them pass!
+// 2. Administrators Array (Username + Hashed Password)
+// The password below is the hash for: "admin123"
+const admins = [
+    { 
+        username: "admin", 
+        password: "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9" 
+    }
+];
+
+// 3. Session State
+// (In a real app, use 'express-session' with process.env.SESSION_SECRET)
+let currentSessionUser = null; 
+
+// 4. Middleware: isAuthenticated
+const isAuthenticated = (req, res, next) => {
+    if (currentSessionUser) {
+        next();
     } else {
-        res.status(401).send("Unauthorized: You must login first."); // Block them!
+        res.status(401).send("Unauthorized: You must login first.");
     }
 };
 
 // --- ENDPOINTS ---
 
-// Root
 app.get('/', (req, res) => {
     res.redirect('/books');
 });
 
-// LOGIN (Exercise 2)
+// LOGIN (Updated for Step 3)
 app.post('/login', (req, res) => {
-    // In a real app, you would check a database for username/password here.
-    // For this exercise, we just trust the user wants to login.
-    isAdminLoggedIn = true;
-    res.send("Login successful! You can now add or delete books.");
+    const { username, password } = req.body;
+
+    // 1. Hash the password the user just sent us
+    const hashedPassword = hashPassword(password);
+
+    // 2. Find if this user exists and the hashes match
+    const user = admins.find(u => u.username === username && u.password === hashedPassword);
+
+    if (user) {
+        currentSessionUser = user.username;
+        res.send(`Login successful! Welcome, ${user.username}.`);
+    } else {
+        res.status(401).send("Invalid username or password");
+    }
 });
 
-// LOGOUT (Exercise 2)
 app.post('/logout', (req, res) => {
-    isAdminLoggedIn = false;
-    res.send("Logout successful. Protected routes are now locked.");
+    currentSessionUser = null;
+    res.send("Logout successful.");
 });
 
-
-// PUBLIC ROUTES (Anyone can see these)
+// PUBLIC ROUTES
 app.get('/books', (req, res) => {
     res.json(books);
 });
@@ -60,12 +86,8 @@ app.get('/books/:id', (req, res) => {
     else res.status(404).send('Book not found');
 });
 
-
-// PROTECTED ROUTES (Exercise 3)
-// Notice we added 'requireLogin' before the (req, res) part.
-
-// 4.3 Add object (Protected)
-app.post('/books', requireLogin, (req, res) => {
+// PROTECTED ROUTES (Using 'isAuthenticated')
+app.post('/books', isAuthenticated, (req, res) => {
     const newBook = {
         id: books.length + 1,
         title: req.body.title,
@@ -75,8 +97,7 @@ app.post('/books', requireLogin, (req, res) => {
     res.status(201).json(newBook);
 });
 
-// 4.4 Delete object (Protected)
-app.delete('/books/:id', requireLogin, (req, res) => {
+app.delete('/books/:id', isAuthenticated, (req, res) => {
     const bookId = parseInt(req.params.id);
     const bookIndex = books.findIndex(b => b.id === bookId);
 

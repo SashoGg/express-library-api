@@ -1,22 +1,28 @@
-### 1. Try to add a book (SHOULD FAIL - 401 Unauthorized)
-POST http://localhost:3000/books
+### 1. Login with WRONG credentials (Should Fail)
+POST http://localhost:3000/login
 Content-Type: application/json
 
 {
-    "title": "Hacker Book",
-    "author": "Anonymous"
+    "username": "admin",
+    "password": "wrongpassword"
 }
 
-### 2. Login
+### 2. Login with CORRECT credentials
 POST http://localhost:3000/login
+Content-Type: application/json
 
-### 3. Add a book (SHOULD WORK now)
+{
+    "username": "admin",
+    "password": "admin123"
+}
+
+### 3. Add a book (Should Work)
 POST http://localhost:3000/books
 Content-Type: application/json
 
 {
-    "title": "The Hobbit",
-    "author": "J.R.R. Tolkien"
+    "title": "Clean Code",
+    "author": "Robert C. Martin"
 }
 
 ### 4. Delete a book (SHOULD WORK)
