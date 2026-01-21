@@ -1,41 +1,126 @@
-### 1. Try to Login (Should FAIL - User doesn't exist yet)
+# ==========================================
+# 1. AUTHENTICATION SYSTEM
+# ==========================================
+
+### 1. Try to Login with Fake User (Should FAIL - 401)
 POST http://localhost:3000/login
 Content-Type: application/json
 
 {
-    "username": "coolAdmin",
-    "password": "securePass123"
+    "username": "ghost_user",
+    "password": "password123"
 }
 
-### 2. Register a new User (NEW!)
+### 2. Register a New Admin User (Should WORK - 201)
+# If you run this twice, it will fail because username must be unique!
 POST http://localhost:3000/register
 Content-Type: application/json
 
 {
-    "username": "coolAdmin",
+    "username": "libraryAdmin",
     "password": "securePass123"
 }
 
-### 3. Login with that new User (Should WORK)
+### 3. Login with the New User (Should WORK - 200)
+# This sets the session variable in the server
 POST http://localhost:3000/login
 Content-Type: application/json
 
 {
-    "username": "coolAdmin",
+    "username": "libraryAdmin",
     "password": "securePass123"
 }
 
-### 4. Add a book (Proof that you are logged in)
+# ==========================================
+# 2. BOOKS (Parent Table)
+# ==========================================
+
+### 4. Add "The Great Gatsby" (Should WORK - 201)
 POST http://localhost:3000/books
 Content-Type: application/json
 
 {
-    "title": "Harry Potter",
-    "author": "J.K. Rowling"
+    "title": "The Great Gatsby",
+    "author": "F. Scott Fitzgerald"
 }
 
-### 5. Logout
+### 5. Add "1984" (Should WORK - 201)
+POST http://localhost:3000/books
+Content-Type: application/json
+
+{
+    "title": "1984",
+    "author": "George Orwell"
+}
+
+### 6. Get All Books (Check IDs)
+# You should see the two books you just added.
+GET http://localhost:3000/books
+
+# ==========================================
+# 3. REVIEWS (Child Table - Linked to Books)
+# ==========================================
+
+### 7. Add Review for Book #1 (The Great Gatsby)
+POST http://localhost:3000/reviews
+Content-Type: application/json
+
+{
+    "text": "A classic American novel.",
+    "rating": 5,
+    "book_id": 2
+}
+
+### 8. Add Review for Book #2 (1984)
+POST http://localhost:3000/reviews
+Content-Type: application/json
+
+{
+    "text": "Very scary but important.",
+    "rating": 4,
+    "book_id": 3
+}
+
+### 9. Try to Review a Book that DOES NOT EXIST (Should FAIL - 400)
+# SQLite Foreign Key should block this because Book ID 999 isn't real.
+POST http://localhost:3000/reviews
+Content-Type: application/json
+
+{
+    "text": "Ghost review",
+    "rating": 1,
+    "book_id": 999
+}
+
+### 10. See Reviews specifically for Book #1
+GET http://localhost:3000/books/2/reviews
+
+# ==========================================
+# 4. DELETION & CLEANUP
+# ==========================================
+
+### 11. Delete the Review for 1984 (Review ID likely 2)
+DELETE http://localhost:3000/reviews/2
+
+### 12. Delete Book #1 (The Great Gatsby)
+# Note: Because of "ON DELETE CASCADE", this should also delete Review #1 automatically!
+DELETE http://localhost:3000/books/1
+
+### 13. Verify Book #1 is gone
+GET http://localhost:3000/books/1
+
+# ==========================================
+# 5. LOGOUT
+# ==========================================
+
+### 14. Logout
 POST http://localhost:3000/logout
 
-### 6. Try to delete again (SHOULD FAIL)
-DELETE http://localhost:3000/books/2
+### 15. Try to Add a Book after Logout (Should FAIL - 401)
+POST http://localhost:3000/books
+Content-Type: application/json
+
+{
+    "title": "Hacker Book",
+    "author": "Anonymous"
+}
