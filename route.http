@@ -1,0 +1,17 @@
+### 1. Get all books (Exercise 4.1)
+GET http://localhost:3000/books
+
+### 2. Get a specific book by ID (Exercise 4.2)
+GET http://localhost:3000/books/1
+
+### 3. Add a new book (Exercise 4.3)
+POST http://localhost:3000/books
+Content-Type: application/json
+
+{
+    "title": "The Hobbit",
+    "author": "J.R.R. Tolkien"
+}
+
+### 4. Delete a book by ID (Exercise 4.4)
+DELETE http://localhost:3000/books/1
