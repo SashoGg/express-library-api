@@ -1,35 +1,59 @@
 require('dotenv').config();
 const express = require('express');
-// Import randomBytes to generate unique salts
 const { createHash, randomBytes } = require('node:crypto');
+const sqlite3 = require('sqlite3');
+const { open } = require('sqlite');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// --- DATA ---
-let books = [
-    { id: 1, title: "The Great Gatsby", author: "F. Scott Fitzgerald" },
-    { id: 2, title: "1984", author: "George Orwell" },
-    { id: 3, title: "To Kill a Mockingbird", author: "Harper Lee" }
-];
+// --- DATABASE SETUP ---
+let db;
 
-// --- SECURITY SYSTEM (Enhanced with Salting) ---
+// This function connects to the DB and sets up tables if they don't exist
+async function initializeDB() {
+    db = await open({
+        filename: 'database.sqlite',
+        driver: sqlite3.Database
+    });
 
-// 1. Helper: Hash Password with Salt
-// We combine the password AND the random salt before hashing
+    console.log('Connected to SQLite database.');
+
+    // Create Books Table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS books (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            author TEXT
+        )
+    `);
+
+    // Create Users Table (Replacing the admins array)
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT,
+            salt TEXT
+        )
+    `);
+}
+
+// Initialize the DB immediately
+initializeDB().catch(err => {
+    console.error("Failed to initialize DB:", err);
+});
+
+// --- SECURITY HELPERS ---
+
 const hashPassword = (password, salt) => {
     return createHash('sha256').update(password + salt).digest('hex');
 };
 
-// 2. Administrators Array
-// We start empty. You must use /register to create a user!
-const admins = [];
-
 let currentSessionUser = null; 
 
-// 3. Middleware: isAuthenticated
 const isAuthenticated = (req, res, next) => {
     if (currentSessionUser) {
         next();
@@ -44,53 +68,43 @@ app.get('/', (req, res) => {
     res.redirect('/books');
 });
 
-// NEW: REGISTER (Optional Task 1)
-app.post('/register', (req, res) => {
+// REGISTER (Now saves to DB)
+app.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
-    // Check if user already exists
-    if (admins.find(u => u.username === username)) {
+    // Check if user exists
+    const existingUser = await db.get('SELECT * FROM users WHERE username = ?', [username]);
+    if (existingUser) {
         return res.status(400).send("User already exists.");
     }
 
-    // 1. Generate a random unique salt for this user
     const salt = randomBytes(16).toString('hex');
-
-    // 2. Hash the password combined with the salt
     const hashedPassword = hashPassword(password, salt);
 
-    // 3. Store everything (including the salt!)
-    const newUser = { 
-        username, 
-        password: hashedPassword, 
-        salt 
-    };
+    // INSERT into database
+    await db.run(
+        'INSERT INTO users (username, password, salt) VALUES (?, ?, ?)',
+        [username, hashedPassword, salt]
+    );
     
-    admins.push(newUser);
     res.status(201).send(`User ${username} registered successfully!`);
 });
 
-// LOGIN (Updated for Salt)
-app.post('/login', (req, res) => {
+// LOGIN (Now checks DB)
+app.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
-    const user = admins.find(u => u.username === username);
+    // Get user from DB
+    const user = await db.get('SELECT * FROM users WHERE username = ?', [username]);
 
     if (user) {
-        // 1. Grab the salt WE SAVED when this user registered
-        const storedSalt = user.salt;
-
-        // 2. Hash the input password with that specific salt
-        const loginHash = hashPassword(password, storedSalt);
-
-        // 3. Compare the new hash with the stored hash
+        const loginHash = hashPassword(password, user.salt);
         if (loginHash === user.password) {
             currentSessionUser = user.username;
             return res.send(`Login successful! Welcome, ${user.username}.`);
         }
     }
 
-    // If user not found OR password doesn't match
     res.status(401).send("Invalid username or password");
 });
 
@@ -99,36 +113,48 @@ app.post('/logout', (req, res) => {
     res.send("Logout successful.");
 });
 
-// PUBLIC ROUTES
-app.get('/books', (req, res) => {
+// --- BOOK ENDPOINTS (Now using DB) ---
+
+// 4.1 Get all objects
+app.get('/books', async (req, res) => {
+    const books = await db.all('SELECT * FROM books');
     res.json(books);
 });
 
-app.get('/books/:id', (req, res) => {
-    const bookId = parseInt(req.params.id);
-    const book = books.find(b => b.id === bookId);
-    if (book) res.json(book);
-    else res.status(404).send('Book not found');
+// 4.2 Get object by ID
+app.get('/books/:id', async (req, res) => {
+    const book = await db.get('SELECT * FROM books WHERE id = ?', [req.params.id]);
+    
+    if (book) {
+        res.json(book);
+    } else {
+        res.status(404).send('Book not found');
+    }
 });
 
-// PROTECTED ROUTES
-app.post('/books', isAuthenticated, (req, res) => {
-    const newBook = {
-        id: books.length + 1,
-        title: req.body.title,
-        author: req.body.author
-    };
-    books.push(newBook);
-    res.status(201).json(newBook);
+// 4.3 Add object (Protected)
+app.post('/books', isAuthenticated, async (req, res) => {
+    const { title, author } = req.body;
+    
+    // Run the INSERT and get the result (so we know the new ID)
+    const result = await db.run(
+        'INSERT INTO books (title, author) VALUES (?, ?)',
+        [title, author]
+    );
+
+    res.status(201).json({
+        id: result.lastID, // The DB generates the ID now
+        title,
+        author
+    });
 });
 
-app.delete('/books/:id', isAuthenticated, (req, res) => {
-    const bookId = parseInt(req.params.id);
-    const bookIndex = books.findIndex(b => b.id === bookId);
+// 4.4 Delete object (Protected)
+app.delete('/books/:id', isAuthenticated, async (req, res) => {
+    const result = await db.run('DELETE FROM books WHERE id = ?', [req.params.id]);
 
-    if (bookIndex > -1) {
-        books.splice(bookIndex, 1);
-        res.send(`Book with ID ${bookId} deleted.`);
+    if (result.changes > 0) {
+        res.send(`Book with ID ${req.params.id} deleted.`);
     } else {
         res.status(404).send('Book not found');
     }
