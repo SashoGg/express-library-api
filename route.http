@@ -1,10 +1,16 @@
-### 1. Get all books (Exercise 4.1)
-GET http://localhost:3000/books
+### 1. Try to add a book (SHOULD FAIL - 401 Unauthorized)
+POST http://localhost:3000/books
+Content-Type: application/json
 
-### 2. Get a specific book by ID (Exercise 4.2)
-GET http://localhost:3000/books/1
+{
+    "title": "Hacker Book",
+    "author": "Anonymous"
+}
 
-### 3. Add a new book (Exercise 4.3)
+### 2. Login
+POST http://localhost:3000/login
+
+### 3. Add a book (SHOULD WORK now)
 POST http://localhost:3000/books
 Content-Type: application/json
 
@@ -13,5 +19,11 @@ Content-Type: application/json
     "author": "J.R.R. Tolkien"
 }
 
-### 4. Delete a book by ID (Exercise 4.4)
+### 4. Delete a book (SHOULD WORK)
 DELETE http://localhost:3000/books/1
+
+### 5. Logout
+POST http://localhost:3000/logout
+
+### 6. Try to delete again (SHOULD FAIL)
+DELETE http://localhost:3000/books/2
