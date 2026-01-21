@@ -1,12 +1,12 @@
-require('dotenv').config(); // 1. Load environment variables first
+require('dotenv').config();
 const express = require('express');
-const { createHash } = require('node:crypto');
+// Import randomBytes to generate unique salts
+const { createHash, randomBytes } = require('node:crypto');
 
-const app = express(); //
-
+const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(express.json()); // 3. Now you can use 'app'
+app.use(express.json());
 
 // --- DATA ---
 let books = [
@@ -15,28 +15,21 @@ let books = [
     { id: 3, title: "To Kill a Mockingbird", author: "Harper Lee" }
 ];
 
-// --- SECURITY SYSTEM ---
+// --- SECURITY SYSTEM (Enhanced with Salting) ---
 
-// 1. Helper function to hash passwords
-// We use SHA-256 to turn "password123" into a long random string
-const hashPassword = (password) => {
-    return createHash('sha256').update(password).digest('hex');
+// 1. Helper: Hash Password with Salt
+// We combine the password AND the random salt before hashing
+const hashPassword = (password, salt) => {
+    return createHash('sha256').update(password + salt).digest('hex');
 };
 
-// 2. Administrators Array (Username + Hashed Password)
-// The password below is the hash for: "admin123"
-const admins = [
-    { 
-        username: "admin", 
-        password: "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9" 
-    }
-];
+// 2. Administrators Array
+// We start empty. You must use /register to create a user!
+const admins = [];
 
-// 3. Session State
-// (In a real app, use 'express-session' with process.env.SESSION_SECRET)
 let currentSessionUser = null; 
 
-// 4. Middleware: isAuthenticated
+// 3. Middleware: isAuthenticated
 const isAuthenticated = (req, res, next) => {
     if (currentSessionUser) {
         next();
@@ -51,22 +44,54 @@ app.get('/', (req, res) => {
     res.redirect('/books');
 });
 
-// LOGIN (Updated for Step 3)
+// NEW: REGISTER (Optional Task 1)
+app.post('/register', (req, res) => {
+    const { username, password } = req.body;
+
+    // Check if user already exists
+    if (admins.find(u => u.username === username)) {
+        return res.status(400).send("User already exists.");
+    }
+
+    // 1. Generate a random unique salt for this user
+    const salt = randomBytes(16).toString('hex');
+
+    // 2. Hash the password combined with the salt
+    const hashedPassword = hashPassword(password, salt);
+
+    // 3. Store everything (including the salt!)
+    const newUser = { 
+        username, 
+        password: hashedPassword, 
+        salt 
+    };
+    
+    admins.push(newUser);
+    res.status(201).send(`User ${username} registered successfully!`);
+});
+
+// LOGIN (Updated for Salt)
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
 
-    // 1. Hash the password the user just sent us
-    const hashedPassword = hashPassword(password);
-
-    // 2. Find if this user exists and the hashes match
-    const user = admins.find(u => u.username === username && u.password === hashedPassword);
+    const user = admins.find(u => u.username === username);
 
     if (user) {
-        currentSessionUser = user.username;
-        res.send(`Login successful! Welcome, ${user.username}.`);
-    } else {
-        res.status(401).send("Invalid username or password");
+        // 1. Grab the salt WE SAVED when this user registered
+        const storedSalt = user.salt;
+
+        // 2. Hash the input password with that specific salt
+        const loginHash = hashPassword(password, storedSalt);
+
+        // 3. Compare the new hash with the stored hash
+        if (loginHash === user.password) {
+            currentSessionUser = user.username;
+            return res.send(`Login successful! Welcome, ${user.username}.`);
+        }
     }
+
+    // If user not found OR password doesn't match
+    res.status(401).send("Invalid username or password");
 });
 
 app.post('/logout', (req, res) => {
@@ -86,7 +111,7 @@ app.get('/books/:id', (req, res) => {
     else res.status(404).send('Book not found');
 });
 
-// PROTECTED ROUTES (Using 'isAuthenticated')
+// PROTECTED ROUTES
 app.post('/books', isAuthenticated, (req, res) => {
     const newBook = {
         id: books.length + 1,

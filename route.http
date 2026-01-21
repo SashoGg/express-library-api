@@ -1,32 +1,38 @@
-### 1. Login with WRONG credentials (Should Fail)
+### 1. Try to Login (Should FAIL - User doesn't exist yet)
 POST http://localhost:3000/login
 Content-Type: application/json
 
 {
-    "username": "admin",
-    "password": "wrongpassword"
+    "username": "coolAdmin",
+    "password": "securePass123"
 }
 
-### 2. Login with CORRECT credentials
+### 2. Register a new User (NEW!)
+POST http://localhost:3000/register
+Content-Type: application/json
+
+{
+    "username": "coolAdmin",
+    "password": "securePass123"
+}
+
+### 3. Login with that new User (Should WORK)
 POST http://localhost:3000/login
 Content-Type: application/json
 
 {
-    "username": "admin",
-    "password": "admin123"
+    "username": "coolAdmin",
+    "password": "securePass123"
 }
 
-### 3. Add a book (Should Work)
+### 4. Add a book (Proof that you are logged in)
 POST http://localhost:3000/books
 Content-Type: application/json
 
 {
-    "title": "Clean Code",
-    "author": "Robert C. Martin"
+    "title": "Harry Potter",
+    "author": "J.K. Rowling"
 }
-
-### 4. Delete a book (SHOULD WORK)
-DELETE http://localhost:3000/books/1
 
 ### 5. Logout
 POST http://localhost:3000/logout
